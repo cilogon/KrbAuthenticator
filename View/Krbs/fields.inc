@@ -36,12 +36,6 @@
                             array('default' => $vv_authenticator['KrbAuthenticator']['id'])) . "\n";
   print $this->Form->hidden('co_person_id', array('default' => $vv_co_person['CoPerson']['id'])) . "\n";
   
-  // For the moment this is not configurable and we only support SSHA (salted SHA 1).
-  // If we support more than one format concurrently, we'll need to do some clever
-  // rewriting (maybe just override manage()?) to write multiple records for one password.
-  // XXX maybe login in PasswordAuthenticator handles this instead?
-  //print $this->Form->hidden('password_type', array('default' => PasswordEncodingEnum::SSHA)) . "\n";
-  
   // Add breadcrumbs
   print $this->element("coCrumb", array('authenticator' => 'Krb'));
 ?>
