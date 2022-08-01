@@ -419,6 +419,11 @@ class KrbAuthenticator extends AuthenticatorBackend {
                                  $comment,
                                  null, null, null, null, null);
 
+    // We need to manually trigger notification.
+    if($actorCoPersonId == $coPersonId) {
+      $this->notify($data['Krb']['co_person_id']);
+    }
+
     return $comment;
   }
 
