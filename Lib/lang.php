@@ -79,7 +79,7 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'pl.krbauthenticator.ssr.info'       => 'Enter a verified email address or your ACCESS ID to proceed.</p>If you still know your password, click <a href="%1$s">here</a> to directly select a new password.',
   'pl.krbauthenticator.ssr.mt'         => 'Reset Message Template',
   'pl.krbauthenticator.ssr.mt.desc'    => 'Message template used for email to send reset instructions to',
-  'pl.krbauthenticator.ssr.q'          => 'Email Address or Identifier',
+  'pl.krbauthenticator.ssr.q'          => 'Email Address or ACCESS ID',
   'pl.krbauthenticator.ssr.redirect'   => 'Redirect on Self Service Reset',
   'pl.krbauthenticator.ssr.redirect.desc' => 'URL to redirect to on successful self service reset',
   'pl.krbauthenticator.ssr.sent'       => 'An email with further instructions has been sent to the address on record',
