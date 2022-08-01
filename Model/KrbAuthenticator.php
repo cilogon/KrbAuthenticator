@@ -261,12 +261,13 @@ class KrbAuthenticator extends AuthenticatorBackend {
    * @since  COmanage Registry v4.1.0
    * @param  Array   $data            Array of Authenticator data submitted from the view
    * @param  integer $actorCoPersonId Actor CO Person ID
+   * @param  boolean $initialPasswordEvent Whether this is the user setting initial password
    * @return string Human readable (localized) result comment
    * @throws InvalidArgumentException
    * @throws RuntimeException
    */
 
-  public function manage($data, $actorCoPersonId, $actorApiUserId=null) {
+  public function manage($data, $actorCoPersonId, $initialPasswordEvent=false) {
     if(!empty($data['Krb']['token'])) {
       // Me're here from a Self Service Password Reset operation (ssr), which
       // means all we have are the token and the new password. First, we'll need
@@ -363,8 +364,7 @@ class KrbAuthenticator extends AuthenticatorBackend {
     } else {
       // If the actor is the CO Person then the current password is
       // required, so test that it is valid.
-      if($coPersonId == $actorCoPersonId) {
-
+      if(($coPersonId == $actorCoPersonId) && !$initialPasswordEvent) {
         try {
           $ticket = new KRB5CCache();
           $ticket->initPassword($principal, $data['Krb']['passwordc']);
@@ -417,8 +417,7 @@ class KrbAuthenticator extends AuthenticatorBackend {
                                  $actorCoPersonId,
                                  ActionEnum::AuthenticatorEdited,
                                  $comment,
-                                 null, null, null, null,
-                                 $actorApiUserId);
+                                 null, null, null, null, null);
 
     return $comment;
   }
