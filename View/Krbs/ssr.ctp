@@ -78,10 +78,26 @@
 <?php elseif(!empty($vv_token)): ?>
 <?php if(!empty($vv_name)): ?>
 <div class="ui-state-highlight ui-corner-all co-info-topbox">
-  <span class="ui-icon ui-icon-info co-info"></span>
-  <strong><?php print _txt('pl.krbauthenticator.ssr.for', array($vv_name)); ?></strong>
+  <i class="material-icons">info</i>
+  <?php print _txt('pl.krbauthenticator.ssr.for', array($vv_name)); ?>
 </div>
 <?php endif; // vv_name ?>
+
+<div class="co-info-topbox">
+  <i class="material-icons">info</i>
+  <?php
+    $maxlen = isset($vv_authenticator['KrbAuthenticator']['max_length'])
+              ? $vv_authenticator['KrbAuthenticator']['max_length']
+              : 64;
+    $minlen = isset($vv_authenticator['KrbAuthenticator']['min_length'])
+              ? $vv_authenticator['KrbAuthenticator']['min_length']
+              : 8;
+
+    print _txt('pl.krbauthenticator.info', array($minlen, $maxlen));
+  ?>
+</div>
+
+
 
 <ul id="<?php print $this->action; ?>_ssr" class="fields form-list">
   <li>
