@@ -70,6 +70,7 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'pl.krbauthenticator.password.info'  => 'This newly generated password cannot be recovered. If it is lost a new password must be generated. ',
   'pl.krbauthenticator.password.new'   => 'New Password',
   'pl.krbauthenticator.password_source' => 'Password Source',
+  'pl.krbauthenticator.remind.q'       => 'Email Address',
   'pl.krbauthenticator.reset'          => 'Password "%1$s" Reset',
   'pl.krbauthenticator.saved'          => 'Password "%1$s" Set',
   'pl.krbauthenticator.ssr'            => 'Enable Self Service Reset',
