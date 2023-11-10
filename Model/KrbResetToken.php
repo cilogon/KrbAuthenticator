@@ -151,6 +151,10 @@ class KrbResetToken extends AppModel {
       
       if(!empty($matches)) {
         foreach($matches as $m) {
+          // We only want to find Active COPerson records.
+          if(isset($m['CoPerson']['status']) && $m['CoPerson']['status'] != StatusEnum::Active) {
+             continue;
+          }
           // If this is an EmailAddress, make sure it is verified
           if(isset($m['EmailAddress']['verified']) && !$m['EmailAddress']['verified']) {
             continue;
@@ -160,7 +164,7 @@ class KrbResetToken extends AppModel {
             $coPersonId = $m['CoPerson']['id'];
           } elseif($coPersonId != $m['CoPerson']['id']) {
             // We found at least two different CO People, so throw an error
-            throw new InvalidArgumentException(_txt('er.krbauthenticator.ssr.multiple', $q));
+            throw new InvalidArgumentException(_txt('er.krbauthenticator.ssr.multiple', array($q)));
           }
         }
       }
