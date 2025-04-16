@@ -128,10 +128,7 @@ class KrbResetToken extends AppModel {
    */
   
   public function generateRequest($authenticatorId, $q, $mode='reset') {
-    // First, search for a CO Person record that matches $q. Note that both
-    // EmailAddress and Identifier implement exact searching only, so we don't
-    // need to handle that specially here. We do need to know the CO to search
-    // within, though.
+    // First, search for a CO Person record that matches $q.
     
     $coId = $this->KrbAuthenticator->Authenticator->field('co_id', array('Authenticator.id' => $authenticatorId));
     
@@ -147,8 +144,28 @@ class KrbResetToken extends AppModel {
     foreach(array('EmailAddress', 'Identifier') as $model) {
       // Note this search will match _unverified_ email addresses, but we only
       // want to match verified email addresses. We'll filter those below.
-      $matches = $this->CoPerson->$model->search($coId, $q, 25);
+      //$matches = $this->CoPerson->$model->search($coId, $q, 25);
       
+      $args = array();
+      $args['limit'] = 25;
+      $args['contain']['CoPerson'] = 'PrimaryName';
+
+      if($model == 'EmailAddress') {
+        $args['conditions']['AND'] = array(
+          'CoPerson.co_id' => $coId,
+          'LOWER(EmailAddress.mail)' => strtolower($q)
+        );
+        $args['order'] = array('EmailAddress.mail');
+      } elseif ($model == 'Identifier') {
+        $args['conditions']['AND'] = array(
+          'CoPerson.co_id' => $coId,
+          'LOWER(Identifier.identifier)' => strtolower($q)
+        );
+        $args['order'] = array('Identifier.identifier');
+      }
+
+      $matches = $this->CoPerson->$model->find('all', $args);
+
       if(!empty($matches)) {
         foreach($matches as $m) {
           // We only want to find Active COPerson records.
