@@ -43,6 +43,18 @@ class Krb extends AppModel {
     "CoPerson"
   );
 
+  // Map REST index filters to model belongsTo associations so the generic
+  // StandardController::index() path accepts ?krb_authenticator_id=N. The
+  // SAMController REST branch handles the ?krbauthid=N URL form already; this
+  // filter is a documented alternative for callers preferring the model-attribute
+  // name. See the URL-disambiguation gotcha in the plan / README: the two query
+  // params are NOT aliases at the same code path — they fire in different
+  // index() branches and ?krb_authenticator_id=N does NOT compose with
+  // ?copersonid=M.
+  public $permittedApiFilters = array(
+    'krb_authenticator_id' => 'KrbAuthenticator.KrbAuthenticator'
+  );
+
   // Default display field for cake generated views
   public $displayField = "co_person_id";
 

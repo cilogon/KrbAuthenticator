@@ -91,6 +91,49 @@ class KrbsController extends SAMController {
   }
   
   /**
+   * REST index override. Mirrors SAMController::index()'s REST branch but
+   * returns 200 + empty Krbs array when find() returns no rows under a
+   * matching ?krbauthid=N parent flag. SAMController returns 404 here (with
+   * an XXX comment in upstream code acknowledging the behavior is wrong but
+   * not fixed); R1/R2 of this plan commit to the 200+empty contract.
+   *
+   * Non-REST requests and REST requests without ?krbauthid fall through to
+   * the inherited parent::index() so UI flows and StandardController's
+   * permittedApiFilters branch keep working unchanged.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   */
+
+  public function index() {
+    if(!$this->request->is('restful')) {
+      // UI path unchanged.
+      return parent::index();
+    }
+
+    if(empty($this->params['url']['krbauthid'])) {
+      // No parent flag - SAMController falls through to StandardController's
+      // generic REST index, which honors $permittedApiFilters on the Krb
+      // model. Preserve that behavior unchanged.
+      return parent::index();
+    }
+
+    // Parent flag is present: replicate SAMController's REST find but convert
+    // the empty-result branch from 404 into 200 + empty array.
+    $args = array();
+    $args['conditions']['Krb.krb_authenticator_id'] = $this->params['url']['krbauthid'];
+    if(!empty($this->params['url']['copersonid'])) {
+      $args['conditions']['Krb.co_person_id'] = $this->params['url']['copersonid'];
+    }
+    $args['contain'] = false;
+
+    $t = $this->Krb->find('all', $args);
+
+    // R1/R2: empty result is 200 with an empty Krbs array.
+    $this->set('krbs', $this->Api->convertRestResponse($t));
+    $this->Api->restResultHeader(200, "OK");
+  }
+
+  /**
    * Determine the CO ID based on some attribute of the request.
    * This method is intended to be overridden by model-specific controllers.
    *
