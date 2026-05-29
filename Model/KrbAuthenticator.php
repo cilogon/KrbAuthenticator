@@ -259,15 +259,16 @@ class KrbAuthenticator extends AuthenticatorBackend {
    * Manage Authenticator data, as submitted from the view.
    *
    * @since  COmanage Registry v4.1.0
-   * @param  Array   $data            Array of Authenticator data submitted from the view
-   * @param  integer $actorCoPersonId Actor CO Person ID
+   * @param  Array   $data                 Array of Authenticator data submitted from the view
+   * @param  integer $actorCoPersonId      Actor CO Person ID (null for REST callers)
+   * @param  integer $actorApiUserId       Actor API User ID (non-null for REST callers; null for UI callers)
    * @param  boolean $initialPasswordEvent Whether this is the user setting initial password
    * @return string Human readable (localized) result comment
    * @throws InvalidArgumentException
    * @throws RuntimeException
    */
 
-  public function manage($data, $actorCoPersonId, $initialPasswordEvent=false) {
+  public function manage($data, $actorCoPersonId, $actorApiUserId=null, $initialPasswordEvent=false) {
     if(!empty($data['Krb']['token'])) {
       // Me're here from a Self Service Password Reset operation (ssr), which
       // means all we have are the token and the new password. First, we'll need
@@ -408,16 +409,25 @@ class KrbAuthenticator extends AuthenticatorBackend {
                     array($this->pluginCfg['Authenticator']['description']));
 
     // Write a history record for the CO Person.
-    $this->Authenticator
-         ->Co
-         ->CoPerson
-         ->HistoryRecord->record($coPersonId,
-                                 null,
-                                 null,
-                                 $actorCoPersonId,
-                                 ActionEnum::AuthenticatorEdited,
-                                 $comment,
-                                 null, null, null, null, null);
+    //
+    // Suppress this internal write when invoked from REST: the REST controller
+    // writes its own pKKI/pKKS/pKKF/pKKD records (R19/R20) and an additional
+    // AuthenticatorEdited entry here would produce a three-record audit trail
+    // and break KTD-5's audit-query invariant. UI callers always pass
+    // $actorApiUserId == null, so they still get the AuthenticatorEdited row
+    // they expect.
+    if($actorApiUserId === null) {
+      $this->Authenticator
+           ->Co
+           ->CoPerson
+           ->HistoryRecord->record($coPersonId,
+                                   null,
+                                   null,
+                                   $actorCoPersonId,
+                                   ActionEnum::AuthenticatorEdited,
+                                   $comment,
+                                   null, null, null, null);
+    }
 
     // We need to manually trigger notification.
     if($actorCoPersonId == $coPersonId) {
@@ -541,7 +551,7 @@ class KrbAuthenticator extends AuthenticatorBackend {
                                  $actorCoPersonId,
                                  ActionEnum::AuthenticatorDeleted,
                                  $comment,
-                                 null, null, null, null,
+                                 null, null, null,
                                  $actorApiUserId);
 
     // We always return true
