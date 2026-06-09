@@ -50,7 +50,34 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'er.krbauthenticator.ssr.notfound'   => 'No verified email address was found for "%1$s"',
   'er.krbauthenticator.token.expired'  => 'Reset token expired',
   'er.krbauthenticator.token.notfound' => 'Reset token not found',
-  
+
+  // REST V1 error messages. These are returned verbatim in 4xx/5xx
+  // response bodies and as HistoryRecord.comment substrings; they must
+  // contain no password material, no principal-bearing strings, and no
+  // exception text fragments (R14a/R14b).
+  'er.krbauthenticator.rest.validation'             => 'The supplied data did not meet the validation requirements.',
+  'er.krbauthenticator.rest.kdc.failed'             => 'The Kerberos key distribution center could not commit the password change. Contact your administrator.',
+  'er.krbauthenticator.rest.kdc.policy'             => 'The Kerberos key distribution center rejected the password under its policy.',
+  'er.krbauthenticator.rest.actor.target.forbidden' => 'An API user may not set or change their own Kerberos credential via REST.',
+  'er.krbauthenticator.rest.co.mismatch'            => 'The KrbAuthenticator instance does not belong to the resolved CO.',
+  'er.krbauthenticator.rest.row.exists'             => 'A Krb record already exists for this CO Person under this KrbAuthenticator; use PUT to change the password.',
+  'er.krbauthenticator.rest.row.missing'            => 'No Krb record found at the requested location.',
+  'er.krbauthenticator.rest.rate.limited'           => 'Rate limit exceeded. Retry after the indicated interval.',
+  'er.krbauthenticator.rest.ratelimiter.unavailable' => 'The rate limiter is unavailable. Please retry.',
+  'er.krbauthenticator.rest.audit.preflight'        => 'The audit preflight check failed.',
+  'er.krbauthenticator.rest.kdc.divergence'         => 'The Kerberos credential change is in an inconsistent state. Replay the request to converge.',
+  'er.krbauthenticator.rest.method.not.allowed'     => 'This method is not allowed on this resource.',
+
+  // REST V1 HistoryRecord.comment templates. Vars are opaque numeric IDs
+  // only — KrbAuthenticator instance ID, then (for outcomes that know
+  // the row ID) the cm_krbs.id. Format strings deliberately avoid
+  // principal names, KDC hostnames, and any payload-derived content.
+  'pl.krbauthenticator.rest.audit.intent'     => 'REST credential change intent recorded for KrbAuthenticator %1$d.',
+  'pl.krbauthenticator.rest.audit.succeeded'  => 'REST credential change succeeded for KrbAuthenticator %1$d, Krb row %2$d.',
+  'pl.krbauthenticator.rest.audit.failed'     => 'REST credential change failed before KDC commit for KrbAuthenticator %1$d.',
+  'pl.krbauthenticator.rest.audit.divergence' => 'REST credential change diverged after KDC commit for KrbAuthenticator %1$d; manual reconciliation may be required.',
+  'pl.krbauthenticator.rest.audit.unknown'    => 'REST credential change recorded for KrbAuthenticator %1$d with an unrecognized action code.',
+
   // Plugin texts
   'pl.krbauthenticator.principal_type' => 'Principal Identifier Type',
   'pl.krbauthenticator.principal_type.desc' => 'Identifier type used for Kerberos principal',
