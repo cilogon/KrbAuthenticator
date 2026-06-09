@@ -34,13 +34,18 @@ class KrbsController extends SAMController {
   // Class name, used by Cake
   public $name = "Krbs";
 
-  // REST V1: load the plugin-local rate-limit counter alongside the default
-  // Krb model so the REST POST/PUT branches can reference it as
-  // $this->KrbRateLimitCounter without ClassRegistry::init() at every call
-  // site. The base SAMController/StandardController inherit $uses = array()
-  // and set $this->modelClass = 'Krb' via beforeFilter, so listing both
-  // models here preserves the existing default.
-  public $uses = array('KrbAuthenticator.Krb', 'KrbAuthenticator.KrbRateLimitCounter');
+  // No $uses override here. SAMController declares
+  //   public $uses = array('Authenticator', 'CoEnrollmentAuthenticator',
+  //                        'CoEnrollmentFlow', 'CoPerson', 'CoPetition');
+  // and the inherited beforeFilter chain reads $this->Authenticator inside
+  // calculateImpliedCoId() on every request — including UI manage(). A
+  // subclass $uses replaces the parent's array (Cake 2 does not merge), so
+  // declaring one here would null out $this->Authenticator and break the
+  // UI flow. The plugin-local KrbRateLimitCounter model is lazy-loaded
+  // inside the REST branches via restLoadRateLimitCounter() below, which
+  // also preserves the plan's "no UI flow change during deploy window"
+  // guarantee: a deployment that has not yet run the schema migration
+  // never instantiates the counter model on UI requests.
 
   // Krb Authenticator ID, used by ssr()
   protected $krbAuthenticatorId = null;
@@ -714,8 +719,49 @@ class KrbsController extends SAMController {
   }
 
   /**
+   * REST DELETE returns 405 Method Not Allowed.
+   *
+   * V1 explicitly does not expose credential removal via REST (R6) so
+   * deprovisioning continues to flow through the Registry UI. The
+   * Router::mapResources route still maps DELETE to this controller; we
+   * intercept here and emit 405 + Allow before any model interaction.
+   * Non-restful invocations are passed through to parent::delete() so
+   * the inherited UI path stays unchanged.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   */
+
+  public function delete($id) {
+    if($this->request->is('restful')) {
+      $this->response->header('Allow', 'GET, POST, PUT');
+      $this->restEmit(405, 'er.krbauthenticator.rest.method.not.allowed');
+      return;
+    }
+    return parent::delete($id);
+  }
+
+  /**
+   * Lazy-load the plugin-local KrbRateLimitCounter model onto
+   * $this->KrbRateLimitCounter. Called by restAdd() and restEdit() before
+   * any rate-limit interaction; never called from UI request paths, so a
+   * deployment that has not yet run the V1 schema migration can keep
+   * serving UI traffic unaffected.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   */
+
+  protected function restLoadRateLimitCounter() {
+    if(empty($this->KrbRateLimitCounter)) {
+      $this->KrbRateLimitCounter =
+        ClassRegistry::init('KrbAuthenticator.KrbRateLimitCounter');
+    }
+  }
+
+  /**
    * Probe whether cm_krb_rate_limit_counters is reachable. Returns true on
    * the second and later calls within the same REST request (memoized).
+   * Lazy-loads the counter model on first call so callers do not need to
+   * remember to do it themselves.
    *
    * @since  COmanage Registry KrbAuthenticator REST V1
    * @return boolean
@@ -725,6 +771,7 @@ class KrbsController extends SAMController {
     if($this->restRateLimiterReachable !== null) {
       return $this->restRateLimiterReachable;
     }
+    $this->restLoadRateLimitCounter();
     try {
       // Cheap probe: a bounded find against the table. We do not care
       // whether rows come back — only that the table responds.
