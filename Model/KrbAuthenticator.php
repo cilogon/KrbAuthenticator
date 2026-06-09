@@ -119,7 +119,34 @@ class KrbAuthenticator extends AuthenticatorBackend {
       'rule' => array('url', true),
       'required' => false,
       'allowEmpty' => true
+    ),
+    // REST V1 rate-limit tunables. NULL-allowed so existing rows pick up
+    // the code-side defaults below at read time; no backfill SQL needed.
+    'rest_rate_limit_per_credential_per_minute' => array(
+      'rule' => array('range', 0, 100000),
+      'required' => false,
+      'allowEmpty' => true
+    ),
+    'rest_rate_limit_per_target_per_hour' => array(
+      'rule' => array('range', 0, 100000),
+      'required' => false,
+      'allowEmpty' => true
+    ),
+    'rest_rate_limit_per_instance_per_hour' => array(
+      'rule' => array('range', 0, 100000),
+      'required' => false,
+      'allowEmpty' => true
     )
+  );
+
+  // REST V1 code-side defaults for the three rate-limit tunables. Read by
+  // KrbsController via restRateLimits() when the cm_krb_authenticators row
+  // has NULL in any of the columns. Centralizing the defaults here means
+  // changing one of them in a future release is a single-file edit.
+  public $restRateLimitDefaults = array(
+    'rest_rate_limit_per_credential_per_minute' => 5,
+    'rest_rate_limit_per_target_per_hour' => 2,
+    'rest_rate_limit_per_instance_per_hour' => 20
   );
 
   // Do we support multiple authenticators per instantiation?
@@ -134,6 +161,60 @@ class KrbAuthenticator extends AuthenticatorBackend {
 
   public function cmPluginMenus() {
     return array();
+  }
+
+  /**
+   * Resolve the three REST rate-limit tunables for a KrbAuthenticator
+   * instance, applying code-side defaults for any column whose row value
+   * is NULL.
+   *
+   * Returns the limits the REST POST/PUT branches in KrbsController need
+   * to call KrbRateLimitCounter::checkAndIncrement(). Centralizing the
+   * NULL-to-default resolution here keeps the V1 migration backfill-free:
+   * existing cm_krb_authenticators rows transparently inherit the V1
+   * defaults at first read.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   * @param  integer $id KrbAuthenticator ID.
+   * @return array       Map with keys per_credential_per_minute,
+   *                     per_target_per_hour, per_instance_per_hour;
+   *                     values are positive integers.
+   * @throws RuntimeException When the KrbAuthenticator row is missing.
+   */
+
+  public function restRateLimits($id) {
+    $row = $this->find('first', array(
+      'conditions' => array('KrbAuthenticator.id' => $id),
+      'contain' => false,
+      'recursive' => -1
+    ));
+
+    if(empty($row['KrbAuthenticator'])) {
+      throw new RuntimeException(_txt('er.notfound',
+        array(_txt('ct.krb_authenticators.1'), $id)));
+    }
+
+    $r = $row['KrbAuthenticator'];
+    $d = $this->restRateLimitDefaults;
+
+    $perCredential = isset($r['rest_rate_limit_per_credential_per_minute'])
+      ? $r['rest_rate_limit_per_credential_per_minute'] : null;
+    $perTarget = isset($r['rest_rate_limit_per_target_per_hour'])
+      ? $r['rest_rate_limit_per_target_per_hour'] : null;
+    $perInstance = isset($r['rest_rate_limit_per_instance_per_hour'])
+      ? $r['rest_rate_limit_per_instance_per_hour'] : null;
+
+    return array(
+      'per_credential_per_minute' => ($perCredential === null || $perCredential === '')
+        ? $d['rest_rate_limit_per_credential_per_minute']
+        : (int)$perCredential,
+      'per_target_per_hour' => ($perTarget === null || $perTarget === '')
+        ? $d['rest_rate_limit_per_target_per_hour']
+        : (int)$perTarget,
+      'per_instance_per_hour' => ($perInstance === null || $perInstance === '')
+        ? $d['rest_rate_limit_per_instance_per_hour']
+        : (int)$perInstance
+    );
   }
 
   /**

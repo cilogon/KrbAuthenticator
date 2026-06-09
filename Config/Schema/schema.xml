@@ -45,9 +45,16 @@
     <field name="username_reminder_message_template_id" type="I">
       <constraint>REFERENCES cm_co_message_templates(id)</constraint>
     </field>
+    <!-- REST V1 rate-limit tunables (per KrbAuthenticator instance).
+         NULL-allowed with no DB-level default so existing rows inherit
+         code-side V1 defaults (5/min credential, 2/hour target, 20/hour
+         instance) applied at read time. -->
+    <field name="rest_rate_limit_per_credential_per_minute" type="I" />
+    <field name="rest_rate_limit_per_target_per_hour" type="I" />
+    <field name="rest_rate_limit_per_instance_per_hour" type="I" />
     <field name="created" type="T" />
     <field name="modified" type="T" />
-    
+
     <index name="krb_authenticators_i1">
       <col>authenticator_id</col>
       <unique />
@@ -79,6 +86,20 @@
     </index>
     <index name="krbs_i2">
       <col>krb_id</col>
+    </index>
+    <!-- REST V1: prevent SELECT-then-INSERT TOCTOU between two concurrent
+         POSTs targeting the same KrbAuthenticator + CoPerson. The second
+         insert raises a PDOException with SQLSTATE 23000/23505, which the
+         REST controller routes into the pKKD divergence branch. Existing
+         deployments with pre-existing duplicate rows must be deduplicated
+         before this migration runs:
+           SELECT krb_authenticator_id, co_person_id, COUNT(*)
+             FROM cm_krbs GROUP BY 1,2 HAVING COUNT(*) > 1;
+    -->
+    <index name="krbs_i3">
+      <col>krb_authenticator_id</col>
+      <col>co_person_id</col>
+      <unique />
     </index>
   </table>
 
@@ -116,6 +137,36 @@
     
     <index name="krb_reset_tokens_i3">
       <col>krb_reset_token_id</col>
+    </index>
+  </table>
+
+  <!-- REST V1 layered rate limiting. Three scopes share one table:
+         per_credential   key = api_user_id              (60s  window, default 5)
+         per_target       key = "{krb_authenticator_id}:{co_person_id}" (3600s, default 2)
+         per_instance     key = krb_authenticator_id     (3600s window, default 20)
+       The check-and-increment pattern mirrors app/Model/Lock.php:102-134:
+       save() -> on PDOException with SQLSTATE 23000/23505 fall through to
+       updateAll-then-find recovery; rethrow any other SQLSTATE so transient
+       DB errors fail closed. Column 'rl_key' is named with the rl_ prefix
+       because the schema convention in app/Config/Schema/schema.xml avoids
+       'key' as a column name (reserved by MySQL). -->
+  <table name="krb_rate_limit_counters">
+    <field name="id" type="I">
+      <key />
+      <autoincrement />
+    </field>
+    <field name="scope" type="C" size="32" />
+    <field name="rl_key" type="C" size="128" />
+    <field name="window_start_epoch" type="I8" />
+    <field name="count" type="I" />
+    <field name="created" type="T" />
+    <field name="modified" type="T" />
+
+    <index name="krb_rate_limit_counters_i1">
+      <col>scope</col>
+      <col>rl_key</col>
+      <col>window_start_epoch</col>
+      <unique />
     </index>
   </table>
 </schema>
