@@ -478,6 +478,242 @@ class KrbsController extends SAMController {
   }
 
   /**
+   * REST PUT: change a Kerberos credential on an existing row.
+   *
+   * UI form posts continue to flow through the inherited parent::edit().
+   * The REST branch implements R5/R7-R9a/R10-R12a/R14/R14a/R15-R20:
+   *
+   *   - 404 if the cm_krbs row does not exist (R5)
+   *   - R12a authoritative-row guard: the loaded row's krb_authenticator_id
+   *     and co_person_id are the principal-resolution source. If the
+   *     payload supplies values that disagree with the loaded row, 422.
+   *     Principal-bearing payload fields are otherwise ignored.
+   *   - Same three-layer rate limit, audit preflight, intent/outcome
+   *     pattern, and password-scrub finally as add(). The transaction
+   *     wraps only the pKKS outcome write here — there is no row insert
+   *     to protect.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   */
+
+  public function edit($id) {
+    if(!$this->request->is('restful')) {
+      // UI form-post path unchanged.
+      return parent::edit($id);
+    }
+
+    try {
+      $this->restEdit($id);
+    } finally {
+      if(isset($this->request->data['Krb']['password'])) {
+        $this->request->data['Krb']['password'] = '';
+        unset($this->request->data['Krb']['password']);
+      }
+      if(isset($this->request->data['Krb']['password2'])) {
+        $this->request->data['Krb']['password2'] = '';
+        unset($this->request->data['Krb']['password2']);
+      }
+    }
+  }
+
+  /**
+   * REST PUT inner method. See edit() for the contract.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   */
+
+  protected function restEdit($id) {
+    $actorApiUserId = $this->Auth->User('id');
+    $actorCoPersonId = $this->Auth->User('co_person_id');
+
+    if(!$this->restRateLimiterSchemaReachable()) {
+      $this->restEmit(503, 'er.krbauthenticator.rest.ratelimiter.unavailable');
+      return;
+    }
+
+    $existing = $this->Krb->find('first', array(
+      'conditions' => array('Krb.id' => (int)$id),
+      'contain' => false,
+      'recursive' => -1
+    ));
+    if(empty($existing['Krb']['id'])) {
+      $this->restEmit(404, 'er.krbauthenticator.rest.row.missing');
+      return;
+    }
+
+    // R12a: the loaded row's IDs are authoritative. Capture them now;
+    // the payload's IDs are only consulted to detect disagreement.
+    $krbAuthId = (int)$existing['Krb']['krb_authenticator_id'];
+    $coPersonId = (int)$existing['Krb']['co_person_id'];
+
+    $data = $this->Api->getData();
+    if(!is_array($data)) { $data = array(); }
+
+    // R12a payload-vs-loaded-row consistency check: a payload that names
+    // a different krb_authenticator_id or co_person_id is a 422, not a
+    // silent overwrite or a 404.
+    if(!empty($data['krb_authenticator_id'])
+       && (int)$data['krb_authenticator_id'] !== $krbAuthId) {
+      $this->restEmit(422, 'er.krbauthenticator.rest.validation');
+      return;
+    }
+    if(!empty($data['co_person_id'])
+       && (int)$data['co_person_id'] !== $coPersonId) {
+      $this->restEmit(422, 'er.krbauthenticator.rest.validation');
+      return;
+    }
+
+    $password = isset($data['password']) ? (string)$data['password'] : null;
+    $password2 = isset($data['password2']) ? (string)$data['password2'] : null;
+    if($password === null || $password2 === null) {
+      $this->restEmit(422, 'er.krbauthenticator.rest.validation');
+      return;
+    }
+    if($password !== $password2) {
+      $this->restEmit(422, 'er.krbauthenticator.rest.validation');
+      return;
+    }
+
+    $krbAuth = $this->Krb->KrbAuthenticator->find('first', array(
+      'conditions' => array('KrbAuthenticator.id' => $krbAuthId),
+      'contain' => array('Authenticator'),
+      'recursive' => -1
+    ));
+    if(empty($krbAuth['KrbAuthenticator'])) {
+      // The loaded Krb row points at a KrbAuthenticator that no longer
+      // exists. This is an integrity hole that should not happen under
+      // normal operation; surface as 500 rather than masking with 422.
+      $this->log('KrbAuthenticator REST: Krb id ' . (int)$id
+        . ' references missing KrbAuthenticator ' . $krbAuthId);
+      $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+      return;
+    }
+
+    $instanceCoId = !empty($krbAuth['Authenticator']['co_id'])
+      ? (int)$krbAuth['Authenticator']['co_id'] : null;
+    $resolvedCoId = !empty($this->cur_co['Co']['id'])
+      ? (int)$this->cur_co['Co']['id'] : null;
+    if($instanceCoId !== null && $resolvedCoId !== null
+       && $instanceCoId !== $resolvedCoId) {
+      $this->restEmit(403, 'er.krbauthenticator.rest.co.mismatch');
+      return;
+    }
+
+    $minlen = !empty($krbAuth['KrbAuthenticator']['min_length'])
+      ? (int)$krbAuth['KrbAuthenticator']['min_length'] : 8;
+    $maxlen = !empty($krbAuth['KrbAuthenticator']['max_length'])
+      ? (int)$krbAuth['KrbAuthenticator']['max_length'] : 64;
+    if(strlen($password) < $minlen || strlen($password) > $maxlen) {
+      $this->restEmit(422, 'er.krbauthenticator.rest.validation');
+      return;
+    }
+
+    if(!empty($actorCoPersonId) && (int)$actorCoPersonId === $coPersonId) {
+      $this->restEmit(403, 'er.krbauthenticator.rest.actor.target.forbidden');
+      return;
+    }
+
+    $limits = $this->Krb->KrbAuthenticator->restRateLimits($krbAuthId);
+    $checks = array(
+      array('per_credential', (string)$actorApiUserId, 60, $limits['per_credential_per_minute']),
+      array('per_target', $krbAuthId . ':' . $coPersonId, 3600, $limits['per_target_per_hour']),
+      array('per_instance', (string)$krbAuthId, 3600, $limits['per_instance_per_hour'])
+    );
+    foreach($checks as $check) {
+      list($scope, $key, $windowSeconds, $limit) = $check;
+      list($ok, $retryAfter) = $this->KrbRateLimitCounter->checkAndIncrement(
+        $scope, $key, $windowSeconds, $limit);
+      if(!$ok) {
+        $this->response->header('Retry-After', (string)$retryAfter);
+        $this->restEmit(429, 'er.krbauthenticator.rest.rate.limited');
+        return;
+      }
+    }
+
+    $dataSource = $this->Krb->getDataSource();
+    if($dataSource->inTransaction()) {
+      $this->restEmit(500, 'er.krbauthenticator.rest.audit.preflight');
+      return;
+    }
+
+    $this->restWriteAudit(
+      $coPersonId, $actorApiUserId,
+      KrbAuthenticatorActionEnum::KrbKdcChangeIntent,
+      $krbAuthId, (int)$id
+    );
+
+    try {
+      $this->Krb->KrbAuthenticator->setConfig($krbAuth);
+      $manageData = array(
+        'Krb' => array(
+          'krb_authenticator_id' => $krbAuthId,
+          'co_person_id' => $coPersonId,
+          'password' => $password,
+          'password2' => $password2
+        )
+      );
+      $this->Krb->KrbAuthenticator->manage($manageData, null, $actorApiUserId);
+    }
+    catch(InvalidArgumentException $kdcPolicy) {
+      $this->log($kdcPolicy->getMessage());
+      $this->restWriteAudit(
+        $coPersonId, $actorApiUserId,
+        KrbAuthenticatorActionEnum::KrbKdcChangeFailed,
+        $krbAuthId, (int)$id);
+      $this->restEmit(422, 'er.krbauthenticator.rest.kdc.policy');
+      return;
+    }
+    catch(RuntimeException $kdcFailure) {
+      $this->log($kdcFailure->getMessage());
+      $this->restWriteAudit(
+        $coPersonId, $actorApiUserId,
+        KrbAuthenticatorActionEnum::KrbKdcChangeFailed,
+        $krbAuthId, (int)$id);
+      $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+      return;
+    }
+
+    // KDC committed. PUT has no row insert to protect, so the txn here
+    // wraps only the pKKS write — the structure matches U3 so the
+    // divergence handling stays uniform across add()/edit() and a
+    // single-statement INSERT failure for HistoryRecord still routes to
+    // pKKD instead of partially-committed pKKS.
+    $dataSource->begin();
+    try {
+      $this->restWriteAudit(
+        $coPersonId, $actorApiUserId,
+        KrbAuthenticatorActionEnum::KrbKdcChangeSucceeded,
+        $krbAuthId, (int)$id);
+      $dataSource->commit();
+    }
+    catch(Exception $postKdc) {
+      if($dataSource->inTransaction()) {
+        $dataSource->rollback();
+      }
+      $this->log($postKdc->getMessage());
+      $this->restWriteAudit(
+        $coPersonId, $actorApiUserId,
+        KrbAuthenticatorActionEnum::KrbKdcRegistryDivergence,
+        $krbAuthId, (int)$id);
+      $this->restEmit(500, 'er.krbauthenticator.rest.kdc.divergence');
+      return;
+    }
+
+    // PUT does not modify the Krb row, but provisioning targets that
+    // observe credential changes (rather than DB state) want a trigger
+    // here too. Match U3's post-commit Authenticator->provision() call.
+    try {
+      $this->Krb->KrbAuthenticator->Authenticator->provision($coPersonId);
+    }
+    catch(Exception $provErr) {
+      $this->log('KrbAuthenticator REST: provision after Krb update failed: '
+        . $provErr->getMessage());
+    }
+
+    $this->restEmit(200, 'OK');
+  }
+
+  /**
    * Probe whether cm_krb_rate_limit_counters is reachable. Returns true on
    * the second and later calls within the same REST request (memoized).
    *
