@@ -92,12 +92,12 @@ sequenceDiagram
     participant C as API Client
     participant Ctl as KrbsController
     participant RL as KrbRateLimiter
-    participant M as KrbAuthenticator::manage()
+    participant M as KrbAuthenticator.manage
     participant K as KDC
     participant DB as Registry DB
     participant H as HistoryRecord
 
-    C->>Ctl: POST /krbs.json {password, password2, krb_authenticator_id, co_person_id}
+    C->>Ctl: POST /krbs.json with password, password2, krb_authenticator_id, co_person_id
     Ctl->>Ctl: AppController auth: ApiUser HTTP basic, CO resolution
     Ctl->>Ctl: calculateParentPermissions (cmadmin || coadmin)
     Ctl->>Ctl: actor==target guard (403 if matches)
@@ -107,7 +107,7 @@ sequenceDiagram
         RL-->>Ctl: limit breached
         Ctl-->>C: 429 + Retry-After
     end
-    Ctl->>DB: existing Krb row? (409 if yes for POST; 404 if no for PUT)
+    Ctl->>DB: existing Krb row check (409 if yes for POST, 404 if no for PUT)
     Ctl->>H: write intent record (pre-KDC marker)
     Ctl->>M: manage(data, null, actorApiUserId)
     M->>K: changePassword (irreversible)
@@ -125,7 +125,7 @@ sequenceDiagram
             Ctl-->>C: 201 (POST) / 200 (PUT)
         else Registry write fails (divergence)
             Ctl->>H: write pKKD outcome record
-            Ctl-->>C: 5xx sanitized; KDC NOT rolled back
+            Ctl-->>C: 5xx sanitized, KDC NOT rolled back
         end
     end
 ```
