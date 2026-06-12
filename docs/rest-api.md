@@ -260,6 +260,17 @@ per-target counter is NOT incremented when an attempt routes through
 the `pKKF` (KDC failure) or `pKKD` (divergence) branches, so a
 legitimate replay after a transient failure cannot exhaust the budget.
 
+Per-instance defaults are operator-tunable from the KrbAuthenticator
+edit view in the Registry UI. The three form rows are labeled "REST
+API Per-Credential Limit (per minute)", "REST API Per-Target Limit
+(per hour)", and "REST API Per-Instance Limit (per hour)" and accept
+any integer in the range 0–100000. Leaving a field blank preserves
+the code-side default. Setting any of the three to `0` immediately
+rejects REST API password changes against that instance — a documented
+kill-switch state surfaced in the form's help text and visible in the
+read-only view as a plain `0` (an unset field renders as `5 (default)`
+/ `2 (default)` / `20 (default)` instead).
+
 ### Fixed-window boundary effect
 
 The windows are fixed (`floor(time() / window) * window`), not sliding.
@@ -409,6 +420,23 @@ V1 adds:
    GROUP BY 1, 2
    HAVING COUNT(*) > 1;
   ```
+
+**After the migration runs, clear Cake's model schema cache.** Cake 2
+caches each model's column metadata in `app/tmp/cache/models/cake_model_default_*`.
+If anything left a stale cache for `cm_krb_authenticators` or
+`cm_krb_rate_limit_counters` — for instance, the file was created when
+the table or column was missing earlier in the deploy cycle — the REST
+preflight returns 503 and the edit-view form silently no-ops on the
+new fields, even though the schema is now correct. The fix is one
+command:
+
+```
+rm -f app/tmp/cache/models/cake_model_default_*
+```
+
+Cake regenerates the cache on the next request. Required on TEST
+2026-06-11 deploy; expect to be required on every fresh deploy with
+new columns or new tables.
 
 Rollback to V0 leaves the new table and columns in place (Cake 2
 schema-XML does not auto-drop) and leaves the new `pKKI`/`pKKS`/`pKKF`/
