@@ -67,6 +67,7 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'er.krbauthenticator.rest.audit.preflight'        => 'The audit preflight check failed.',
   'er.krbauthenticator.rest.kdc.divergence'         => 'The Kerberos credential change is in an inconsistent state. Replay the request to converge.',
   'er.krbauthenticator.rest.method.not.allowed'     => 'This method is not allowed on this resource.',
+  'er.krbauthenticator.rest.ratelimit.range'        => 'Must be an integer between 0 and 100000.',
 
   // REST V1 HistoryRecord.comment templates. Vars are opaque numeric IDs
   // only — KrbAuthenticator instance ID, then (for outcomes that know
@@ -77,6 +78,19 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'pl.krbauthenticator.rest.audit.failed'     => 'REST credential change failed before KDC commit for KrbAuthenticator %1$d.',
   'pl.krbauthenticator.rest.audit.divergence' => 'REST credential change diverged after KDC commit for KrbAuthenticator %1$d; manual reconciliation may be required.',
   'pl.krbauthenticator.rest.audit.unknown'    => 'REST credential change recorded for KrbAuthenticator %1$d with an unrecognized action code.',
+
+  // REST V1 rate-limit form labels. Title + desc render in the
+  // KrbAuthenticator edit/add view; each desc encodes the kill-switch
+  // disclosure inline so the operator setting `0` knows what they are
+  // doing. The default_label format string is consumed by the view in
+  // read-only mode to render NULL as e.g. "5 (default)".
+  'pl.krbauthenticator.rest.ratelimit.per_credential'      => 'REST API Per-Credential Limit (per minute)',
+  'pl.krbauthenticator.rest.ratelimit.per_credential.desc' => 'Maximum REST API password-change requests per API user per minute. Default is 5. Set to 0 to immediately reject all REST API password changes against this instance.',
+  'pl.krbauthenticator.rest.ratelimit.per_target'          => 'REST API Per-Target Limit (per hour)',
+  'pl.krbauthenticator.rest.ratelimit.per_target.desc'     => 'Maximum REST API password-change requests per CO Person per KrbAuthenticator instance per hour. Default is 2. Set to 0 to immediately reject all REST API password changes against this instance.',
+  'pl.krbauthenticator.rest.ratelimit.per_instance'        => 'REST API Per-Instance Limit (per hour)',
+  'pl.krbauthenticator.rest.ratelimit.per_instance.desc'   => 'Maximum REST API password-change requests against this KrbAuthenticator instance per hour, across all API users and CO People. Default is 20. Set to 0 to immediately reject all REST API password changes against this instance.',
+  'pl.krbauthenticator.rest.ratelimit.default_label'       => '%1$s (default)',
 
   // Plugin texts
   'pl.krbauthenticator.principal_type' => 'Principal Identifier Type',
