@@ -124,16 +124,19 @@ class KrbAuthenticator extends AuthenticatorBackend {
     // the code-side defaults below at read time; no backfill SQL needed.
     'rest_rate_limit_per_credential_per_minute' => array(
       'rule' => array('range', 0, 100000),
+      'message' => 'Must be an integer between 0 and 100000.',
       'required' => false,
       'allowEmpty' => true
     ),
     'rest_rate_limit_per_target_per_hour' => array(
       'rule' => array('range', 0, 100000),
+      'message' => 'Must be an integer between 0 and 100000.',
       'required' => false,
       'allowEmpty' => true
     ),
     'rest_rate_limit_per_instance_per_hour' => array(
       'rule' => array('range', 0, 100000),
+      'message' => 'Must be an integer between 0 and 100000.',
       'required' => false,
       'allowEmpty' => true
     )
