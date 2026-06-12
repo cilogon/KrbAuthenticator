@@ -161,6 +161,107 @@
       <?php print ($e ? $this->Form->input('max_length') : filter_var($krb_authenticators[0]['KrbAuthenticator']['max_length'],FILTER_SANITIZE_SPECIAL_CHARS)); ?>
     </div>
   </li>
+  <?php
+    // REST V1 rate-limit tunables (UI surface).
+    //
+    // The three integer fields map to columns on cm_krb_authenticators
+    // added in V1. NULL in the column means "use the code-side default at
+    // read time" (KrbAuthenticator::restRateLimits() applies the defaults
+    // in $restRateLimitDefaults). The form preserves that semantic: no
+    // 'default' attribute on Form->input, blank input round-trips as NULL
+    // or empty string (the model accessor treats both identically).
+    //
+    // View-mode rendering: NULL shows as e.g. "5 (default)" so an operator
+    // can tell "no override" from "explicitly set to 5". An explicit 0
+    // shows as plain "0" — it is a documented kill switch (sets the rate
+    // limit to 0, causing the first matching REST request to 429), and
+    // the kill-switch disclosure is in the desc string on the same row.
+    //
+    // Default integers 5 / 2 / 20 are hardcoded here intentionally; they
+    // mirror Model/KrbAuthenticator.php $restRateLimitDefaults and the
+    // model is not exposed to the view via any vv_* viewVar. If a future
+    // release bumps a default, update both places.
+    //
+    // The view-mode visibility conditional uses isset() && !== null
+    // && !== '' rather than !empty() so that an explicit integer 0 falls
+    // into the "render typed value" branch and renders as "0", not as
+    // "5 (default)". Do not refactor back to !empty().
+  ?>
+  <li>
+    <div class="field-name">
+      <div class="field-title"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_credential'); ?></div>
+      <div class="field-desc"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_credential.desc'); ?></div>
+    </div>
+    <div class="field-info">
+      <?php
+        if($e) {
+          print $this->Form->input('rest_rate_limit_per_credential_per_minute', array('label' => false));
+
+          if($this->Form->isFieldError('rest_rate_limit_per_credential_per_minute')) {
+            print $this->Form->error('rest_rate_limit_per_credential_per_minute');
+          }
+        } else {
+          if(isset($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_credential_per_minute'])
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_credential_per_minute'] !== null
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_credential_per_minute'] !== '') {
+            print filter_var($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_credential_per_minute'], FILTER_SANITIZE_SPECIAL_CHARS);
+          } else {
+            print _txt('pl.krbauthenticator.rest.ratelimit.default_label', array(5));
+          }
+        }
+      ?>
+    </div>
+  </li>
+  <li>
+    <div class="field-name">
+      <div class="field-title"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_target'); ?></div>
+      <div class="field-desc"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_target.desc'); ?></div>
+    </div>
+    <div class="field-info">
+      <?php
+        if($e) {
+          print $this->Form->input('rest_rate_limit_per_target_per_hour', array('label' => false));
+
+          if($this->Form->isFieldError('rest_rate_limit_per_target_per_hour')) {
+            print $this->Form->error('rest_rate_limit_per_target_per_hour');
+          }
+        } else {
+          if(isset($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_target_per_hour'])
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_target_per_hour'] !== null
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_target_per_hour'] !== '') {
+            print filter_var($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_target_per_hour'], FILTER_SANITIZE_SPECIAL_CHARS);
+          } else {
+            print _txt('pl.krbauthenticator.rest.ratelimit.default_label', array(2));
+          }
+        }
+      ?>
+    </div>
+  </li>
+  <li>
+    <div class="field-name">
+      <div class="field-title"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_instance'); ?></div>
+      <div class="field-desc"><?php print _txt('pl.krbauthenticator.rest.ratelimit.per_instance.desc'); ?></div>
+    </div>
+    <div class="field-info">
+      <?php
+        if($e) {
+          print $this->Form->input('rest_rate_limit_per_instance_per_hour', array('label' => false));
+
+          if($this->Form->isFieldError('rest_rate_limit_per_instance_per_hour')) {
+            print $this->Form->error('rest_rate_limit_per_instance_per_hour');
+          }
+        } else {
+          if(isset($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_instance_per_hour'])
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_instance_per_hour'] !== null
+             && $krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_instance_per_hour'] !== '') {
+            print filter_var($krb_authenticators[0]['KrbAuthenticator']['rest_rate_limit_per_instance_per_hour'], FILTER_SANITIZE_SPECIAL_CHARS);
+          } else {
+            print _txt('pl.krbauthenticator.rest.ratelimit.default_label', array(20));
+          }
+        }
+      ?>
+    </div>
+  </li>
   <li>
     <div class="field-name">
       <div class="field-title"><?php print _txt('pl.krbauthenticator.ssr'); ?></div>
