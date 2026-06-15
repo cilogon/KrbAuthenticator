@@ -58,6 +58,7 @@ $cm_krb_authenticator_texts['en_US'] = array(
   'er.krbauthenticator.rest.validation'             => 'The supplied data did not meet the validation requirements.',
   'er.krbauthenticator.rest.kdc.failed'             => 'The Kerberos key distribution center could not commit the password change. Contact your administrator.',
   'er.krbauthenticator.rest.kdc.policy'             => 'The Kerberos key distribution center rejected the password under its policy.',
+  'er.krbauthenticator.rest.kdc.policy.reuse'       => 'The Kerberos key distribution center rejected the new password because it matches a previous password. Choose a different password and retry.',
   'er.krbauthenticator.rest.actor.target.forbidden' => 'An API user may not set or change their own Kerberos credential via REST.',
   'er.krbauthenticator.rest.co.mismatch'            => 'The KrbAuthenticator instance does not belong to the resolved CO.',
   'er.krbauthenticator.rest.row.exists'             => 'A Krb record already exists for this CO Person under this KrbAuthenticator; use PUT to change the password.',

@@ -397,16 +397,30 @@ class KrbsController extends SAMController {
       return;
     }
     catch(RuntimeException $kdcFailure) {
-      // KDC unreachable, principal missing, or changePassword threw. No
-      // KDC commit happened (manage() throws before changePassword on
-      // connection errors; throws after changePassword on token-finalize
-      // failure — that latter case is pKKD-shaped but indistinguishable
-      // from outside, so coarse 500 + pKKF is acceptable for V1).
+      // KDC unreachable, principal missing, changePassword threw, or
+      // the KDC committed but a token-finalize step failed. No
+      // distinction is possible from outside between true
+      // infrastructure failure and a kadm5 policy reject re-wrapped
+      // by manage() -- so we sniff the message and route policy
+      // rejects (reuse, dictionary, length, etc.) to 422 with a
+      // sanitized lang key, defaulting to 500 + kdc.failed for any
+      // message we do not recognize. The audit outcome stays pKKF
+      // either way: the credential did not commit.
       $this->log($kdcFailure->getMessage());
       $this->restWriteAudit(
         $coPersonId, $actorApiUserId,
         KrbAuthenticatorActionEnum::KrbKdcChangeFailed, $krbAuthId, null);
-      $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+      switch($this->restClassifyKdcRuntime($kdcFailure)) {
+        case 'reuse':
+          $this->restEmit(422, 'er.krbauthenticator.rest.kdc.policy.reuse');
+          break;
+        case 'policy':
+          $this->restEmit(422, 'er.krbauthenticator.rest.kdc.policy');
+          break;
+        default:
+          $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+          break;
+      }
       return;
     }
 
@@ -669,12 +683,25 @@ class KrbsController extends SAMController {
       return;
     }
     catch(RuntimeException $kdcFailure) {
+      // Symmetric with the POST catch above: route kadm5 policy
+      // rejects to 422 + kdc.policy[.reuse]; everything we cannot
+      // recognize stays 500 + kdc.failed.
       $this->log($kdcFailure->getMessage());
       $this->restWriteAudit(
         $coPersonId, $actorApiUserId,
         KrbAuthenticatorActionEnum::KrbKdcChangeFailed,
         $krbAuthId, (int)$id);
-      $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+      switch($this->restClassifyKdcRuntime($kdcFailure)) {
+        case 'reuse':
+          $this->restEmit(422, 'er.krbauthenticator.rest.kdc.policy.reuse');
+          break;
+        case 'policy':
+          $this->restEmit(422, 'er.krbauthenticator.rest.kdc.policy');
+          break;
+        default:
+          $this->restEmit(500, 'er.krbauthenticator.rest.kdc.failed');
+          break;
+      }
       return;
     }
 
@@ -852,6 +879,63 @@ class KrbsController extends SAMController {
         return 'pl.krbauthenticator.rest.audit.divergence';
     }
     return 'pl.krbauthenticator.rest.audit.unknown';
+  }
+
+  /**
+   * Classify a RuntimeException raised by KrbAuthenticator::manage() so
+   * the REST POST/PUT branches can emit a response more specific than
+   * the catch-all `kdc.failed`. The PECL krb5 binding surfaces kadm5
+   * errors as PHP exceptions whose message contains the underlying KDC
+   * string; manage() re-wraps as RuntimeException with that string
+   * preserved (Model/KrbAuthenticator.php:484-489). We sniff for known
+   * policy-reject text fragments emitted by MIT KRB5 and Heimdal kadm5.
+   *
+   * Returns one of:
+   *  - 'reuse'  : KDC rejected because the new password matches a
+   *               recent one (KADM5_PASS_REUSE / password-history check).
+   *  - 'policy' : KDC rejected under another policy rule (length,
+   *               dictionary, character classes, minimum-age).
+   *  - 'failed' : default/safe fallback -- KDC unreachable, principal
+   *               missing, communication error, or any message we do
+   *               not recognize as a policy reject.
+   *
+   * @since  COmanage Registry KrbAuthenticator REST V1
+   * @param  RuntimeException $e Exception wrapped by manage().
+   * @return String              One of 'reuse', 'policy', 'failed'.
+   */
+
+  protected function restClassifyKdcRuntime(RuntimeException $e) {
+    $msg = strtolower($e->getMessage());
+
+    // Reuse-specific signatures first so 'reuse' wins over the broader
+    // 'policy' bucket when both could match.
+    $reuseSignatures = array(
+      'reuse',             // KADM5_PASS_REUSE: "Cannot reuse password"
+      'password history',  // alternate wording from kadm5_passwd_history_check
+    );
+    foreach($reuseSignatures as $sig) {
+      if(strpos($msg, $sig) !== false) {
+        return 'reuse';
+      }
+    }
+
+    // Other kadm5 policy-reject signatures. Substrings are
+    // password-specific to avoid false positives against connectivity
+    // or principal-lookup errors, which talk about hosts and
+    // principals rather than the password itself.
+    $policySignatures = array(
+      'too short',         // KADM5_PASS_Q_TOOSHORT
+      'too soon',          // KADM5_PASS_TOOSOON: change is too recent
+      'dictionary',        // KADM5_PASS_Q_DICT
+      'character class',   // KADM5_PASS_Q_CLASS
+    );
+    foreach($policySignatures as $sig) {
+      if(strpos($msg, $sig) !== false) {
+        return 'policy';
+      }
+    }
+
+    return 'failed';
   }
 
   /**
