@@ -228,7 +228,7 @@ still good practice.
 | 404    | PUT against a non-existent `Krb` row                                                  | `row.missing`                                     |
 | 405    | DELETE                                                                                | `method.not.allowed`                              |
 | 409    | POST when a `Krb` row already exists for the `(authenticator, person)` pair           | `row.exists` (with `Location: ...{id}.json`)      |
-| 422    | Missing/mismatched/length-violating payload; KDC policy reject; tampered IDs (PUT)    | `validation` / `kdc.policy`                       |
+| 422    | Missing/mismatched/length-violating payload; KDC policy reject; tampered IDs (PUT)    | `validation` / `kdc.policy` / `kdc.policy.reuse`  |
 | 429    | One of the three rate-limit windows breached                                          | `rate.limited` (with `Retry-After: N` header)     |
 | 500    | KDC unreachable / changePassword failed; audit preflight assertion failed             | `kdc.failed` / `audit.preflight` / `kdc.divergence` |
 | 503    | `cm_krb_rate_limit_counters` migration not yet applied                                | `ratelimiter.unavailable`                         |
@@ -238,6 +238,16 @@ Body keys are the `er.krbauthenticator.rest.<key>` suffix from
 principal name, KDC hostname, exception fragment, or payload material
 appears in the wire response (R14a). Raw exception text reaches only
 the Registry's PHP error log via `$this->log()`.
+
+The `kdc.policy` and `kdc.policy.reuse` keys differentiate KDC-side
+password rejections from KDC infrastructure failures. The classifier
+in `KrbsController::restClassifyKdcRuntime()` inspects the kadm5 error
+string surfaced by PECL krb5 and matches known substrings (e.g.
+`reuse`, `password history`, `too short`, `dictionary`,
+`character class`). Recognized reuse messages route to
+`kdc.policy.reuse`; other recognized policy rejections route to
+`kdc.policy`; anything unrecognized stays at `500 + kdc.failed` so the
+default response is unchanged for true KDC failures.
 
 ## Rate limits
 
